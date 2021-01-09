@@ -70,7 +70,6 @@
 ;;      refresh
 ;;    - added "Building libraries list ..." message to
 ;;      `ilocate-get-all-libs'
-
 ;;    - clean up the doc strings
 ;;
 ;;
@@ -97,10 +96,23 @@
 ;;
 ;;
 ;; version 0.9.1 09/03/2002 - update maintainer address
+;;
+;;
+;; version 0.9.2 01/14/2012
+;; modified by John Yates <john@yates-sheets.org>
+;;
+;;  - support gzipped files (adjust regexps and doc strings)
+;;  - visit files in view mode
+;;
+;; version 0.9.3 01/08/2021
+;; modified by John Yates <john@yates-sheets.org>
+;;
+;;  - add autoload cookies
+;;  - replace copy-list with cl-copy-list
 
 ;;; Code:
 (defun ilocate-get-all-libs (&optional search-path)
-  "Return a table of all Lisp files \(.el or .elc) in the `load-path'.
+  "Return a table of all Lisp files \(.el[c] or .el[c].gz) in `load-path'.
 
 Optional argument SEARCH-PATH is a list of directory names
 to search instead of those listed in `load-path'.
@@ -123,12 +135,12 @@ See also `ilocate-completing-read-library' and `ilocate-library-cache'."
                 (dirfiles
                  (and
                   (file-accessible-directory-p dir)
-                  (directory-files dir nil ".elc?$" t))))
+                  (directory-files dir nil "\\.elc?\\(\\.gz\\)?$" t))))
            (while (car dirfiles)
              ;; iterate over this directory's files
              (let* ((file (car dirfiles))
                     ;; change file name to package name
-                    (package (if (string-match "\\.elc?$" file)
+                    (package (if (string-match "\\.elc?\\(\\.gz\\)?$" file)
                                  (replace-match "" t nil file)
                                file)))
                ;; add the package to the liblist if it's not already there
@@ -151,7 +163,7 @@ Set only by `ilocate-get-all-libs' from `ilocate-completing-read-library'.")
   "Read Lisp library name from minibuffer with completion.
 
 Allows minibuffer completion to the name of any Lisp file
-\(.el or .elc) in the `load-path'.
+\(.el[c] or .el[c].gz) in the `load-path'.
 
 Optional first argument PROMPT is a prompt string.  If nil,
 use a default prompt: \"Enter library name: \".
@@ -187,20 +199,21 @@ rebuild the cache."
                        ilocate-last-search-path-cache)))
        (progn
          (setq ilocate-last-search-path-cache
-               (copy-list (or search-path
-                              load-path)))
+               (cl-copy-list (or search-path
+                                 load-path)))
          (setq ilocate-library-cache
                (ilocate-get-all-libs search-path)))
      ilocate-library-cache)
    nil t))
 
+;;;###autoload
 (defun ilocate-library (&optional reload-cache)
   "Interactive-only version of `locate-library' with name completion.
 
 This function is intended to be a replacement for the
 interactive functionality of `locate-library'.  It makes a
-completion list from all .el and .elc files in all the
-directories in your `load-path'.
+completion list from all .el, .elc, .el.gz and .elc.gz
+files in all the directories in your `load-path'.
 
 The list of libraries is cached in `ilocate-library-cache',
 which is generated the first time one of the `ilocate-library'
@@ -220,13 +233,14 @@ See also `ilocate-completing-read-library'."
    (ilocate-completing-read-library "ilocate library: " nil reload-cache)
    nil nil t))
 
+;;;###autoload
 (defun ilocate-load-library (&optional reload-cache)
   "Interactive-only version of `load-library' with name completion.
 
 This function is intended to be a replacement for the
 interactive functionality of `load-library'.  It makes a
-completion list from all .el and .elc files in all the
-directories in your `load-path'.
+completion list from all .el, .elc, .el.gz and .elc.gz
+files in all the directories in your `load-path'.
 
 The list of libraries is cached in `ilocate-library-cache',
 which is generated the first time one of the `ilocate-library'
@@ -245,12 +259,13 @@ See also `ilocate-completing-read-library'"
   (load-library
    (ilocate-completing-read-library "iload library: " nil reload-cache)))
 
+;;;###autoload
 (defun ilocate-library-find-source (&optional reload-cache)
   "Prompt with completion for name of a Lisp library, and visit the source.
 
-This function uses list of all .el and .elc files in the
-`load-path', to allow minibuffer completion of the library
-name.
+This function uses list of all .el, .elc, .el.gz and .elc.gz
+files in the `load-path', to allow minibuffer completion of
+the library name.
 
 The list of libraries is cached in `ilocate-library-cache',
 which is generated the first time one of the `ilocate-library'
@@ -260,10 +275,10 @@ With optional prefix arg, RELOAD-CACHE, force refreshing of
 the cache before running this function.
 
 Once the library is located, if it is a compiled Lisp file
-\(.elc), this function looks for the corresponding .el file
-in the same directory.  If found, it visits it with
-`find-file-other-window'.  If the .el file is not found, an
-error is returned.
+\(.elc or .elc.gz), this function looks for the corresponding
+.el or .el.gz file in the same directory.  If found, it visits
+it with `view-file-other-window'.  If no .el nor .el.gz file
+is not found, an error is returned.
 
 Since the value-add of `ilocate-library-find-source' makes
 sense only as an interactive feature, this function should
@@ -277,12 +292,17 @@ See also `ilocate-completing-read-library'"
          ;; use locate-library to change the library name
          ;; into a full path to the library file
          (library-file (locate-library library-name))
-         (source-file (if (string-match "elc$" library-file)
+         (source-file (if (string-match "elc?\\(\\.gz\\)?$" library-file)
                           (replace-match "el" t t library-file)
-                        library-file)))
-    (if (file-exists-p source-file)
-        (find-file-other-window source-file)
-      (error "Source for %s is not available" library-name))))
+?                        library-file))
+         (compressed-source-file (concat source-file ".gz")))
+    (cond
+     ((file-exists-p source-file)
+      (view-file-other-window source-file))
+     ((file-exists-p compressed-source-file)
+      (view-file-other-window compressed-source-file))
+     (t
+      (error "Source for %s is not available" library-name)))))
 
 (provide 'ilocate-library)
 ;;; ilocate-library.el ends here
