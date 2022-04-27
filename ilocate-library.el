@@ -295,12 +295,12 @@ See also `ilocate-completing-read-library'"
          (source-file (if (string-match "elc?\\(\\.gz\\)?$" library-file)
                           (replace-match "el" t t library-file)
                         library-file))
-         (compressed-source-file (concat source-file ".gz")))
+         (source-file-gz (concat source-file ".gz")))
     (cond
      ((file-exists-p source-file)
-      (view-file-other-window source-file))
-     ((file-exists-p compressed-source-file)
-      (view-file-other-window compressed-source-file))
+      (view-file-other-window (file-truename source-file)))
+     ((file-exists-p source-file-gz)
+      (view-file-other-window (file-truename source-file-gz)))
      (t
       (error "Source for %s is not available" library-name)))))
 
