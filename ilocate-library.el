@@ -180,7 +180,7 @@ invocation of `ilocate-completing-read-library'
 Optional third argument RELOAD-CACHE will force a call to
 `ilocate-get-all-libs' to re-scan the `load-path' and
 rebuild the cache."
-  (completing-read
+  (completing-read-default
    (or prompt "Enter library name: " )
    ;; this argument to completing-read is a table of all
    ;; the names of packages found in all the directories in
